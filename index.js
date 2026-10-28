@@ -19,6 +19,10 @@ export default function MutateReact({ children, onHandleMutation, enableLocator 
             return thisObj.__element;
         }
 
+        if (thisObj !== undefined) {
+            console.warn('Unknown value returned in onHandleMutation, value=', thisObj, `\nReturning anything other than \`createMutantElement()\` is ignored, and traversal continues into the node's descendants.`);
+        }
+
         if (!isHostElement(node)) {
             const wrapNodeType = (nodeType, pathway, pathKey, hotReloadObj) => {
                 if (pathway) pathway = [...pathway, getNodeId(undefined, nodeType, pathKey)];
