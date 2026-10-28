@@ -23,14 +23,33 @@ export default function MutateReact({ children, onHandleMutation, enableLocator 
             const wrapNodeType = (nodeType, pathway, pathKey, hotReloadObj) => {
                 if (pathway) pathway = [...pathway, getNodeId(undefined, nodeType, pathKey)];
 
-                const render = (renderedNode) => {
+                const continueRendering = (renderedNode) => {
                     return injectIntoTree(renderedNode, pathway && [...pathway, 0]);
                 }
 
-                if (typeof nodeType === 'function') { // check self closed tag
-                    return hijackRender(nodeType, render, hotReloadObj);
+                if (isClassComponent(nodeType)) {
+                    class MutatedClass extends nodeType {
+                        render() {
+                            if (hotReloadObj?.hot) {
+                                const family = getHotReload().getFamilyByType(nodeType);
+                                const renderMethod = family?.current?.prototype?.render;
+
+                                if (typeof renderMethod === 'function')
+                                    return continueRendering(renderMethod.call(this));
+                            }
+
+                            return continueRendering(super.render());
+                        }
+                    }
+
+                    const name = nodeType.displayName || nodeType.name;
+                    if (name) MutatedClass.displayName = name;
+
+                    return MutatedClass;
+                } else if (typeof nodeType === 'function') { // check self closed tag
+                    return hijackRender(nodeType, continueRendering, hotReloadObj);
                 } else if (nodeType?.$$typeof === REACT_SYMBOLS.forwardRef) {
-                    return forwardRef(hijackRender(nodeType.render, render, hotReloadObj));
+                    return forwardRef(hijackRender(nodeType.render, continueRendering, hotReloadObj));
                 } else if (nodeType?.$$typeof === REACT_SYMBOLS.memo) {
                     const newType = memo(wrapNodeType(nodeType.type, pathway, undefined, hotReloadObj), nodeType.compare);
                     newType.displayName = nodeType.displayName || nodeType.name;
@@ -39,62 +58,16 @@ export default function MutateReact({ children, onHandleMutation, enableLocator 
                 return nodeType;
             }
 
-            const isNodeNotEqual = (nodeType, nodeType2) => {
-                if (nodeType !== nodeType2) return true;
-
-                if (typeof nodeType === 'function') {
-                    return false;
-                } else if (nodeType?.$$typeof === REACT_SYMBOLS.forwardRef) {
-                    return nodeType.render !== nodeType2?.render;
-                } else if (nodeType?.$$typeof === REACT_SYMBOLS.memo) {
-                    return isNodeNotEqual(nodeType.type, nodeType2?.type);
-                }
-
-                return false;
-            }
-
             if (
                 typeof node.type === 'function' || // check self closed tag
                 node.type?.$$typeof === REACT_SYMBOLS.forwardRef || // check forwardRef
                 node.type?.$$typeof === REACT_SYMBOLS.memo // check memo
             ) {
                 return (
-                    <__MutatedReactNode>
-                        {() => {
-                            const wrappedObj =
-                                useMemo(() => {
-                                    const hotReloadSession = {};
-                                    return {
-                                        type: wrapNodeType(node.type, path && path.slice(0, -1), node.key, hotReloadSession),
-                                        reload: hotReloadSession
-                                    };
-                                }, [node.type]);
-
-                            if (__DEV__) {
-                                const [_, forceRefresh] = useReducer(value => value + 1, 0);
-
-                                useEffect(() => {
-                                    return listenHotRefresh(() => {
-                                        const family = getHotReload().getFamilyByType(node.type);
-
-                                        if (family && isNodeNotEqual(node.type, family.current)) {
-                                            wrappedObj.reload.hot = true;
-                                            forceRefresh();
-                                        }
-                                    });
-                                }, []);
-                            }
-
-                            return createElement(
-                                wrappedObj.type,
-                                {
-                                    ...node.props,
-                                    key: node.key
-                                },
-                                node.props?.children
-                            );
-                        }}
-                    </__MutatedReactNode>
+                    <__MutatedReactNode
+                        node={node}
+                        path={path}
+                        wrapNodeType={wrapNodeType} />
                 );
             }
         }
@@ -121,8 +94,54 @@ const REACT_SYMBOLS = {
     memo: Symbol.for('react.memo')
 };
 
-function __MutatedReactNode({ children }) {
-    return children?.();
+function __MutatedReactNode({ node, wrapNodeType, path }) {
+    const wrappedObj =
+        useMemo(() => {
+            const hotReloadSession = {};
+            return {
+                type: wrapNodeType(node.type, path && path.slice(0, -1), node.key, hotReloadSession),
+                reload: hotReloadSession
+            };
+        }, [node.type, node.key]);
+
+    if (__DEV__) {
+        const [_, forceRefresh] = useReducer(value => value + 1, 0);
+
+        useEffect(() => {
+            return listenHotRefresh(() => {
+                const family = getHotReload().getFamilyByType(node.type);
+
+                if (family && isNodeNotEqual(node.type, family.current)) {
+                    wrappedObj.reload.hot = true;
+                    forceRefresh();
+                }
+            });
+        }, [wrappedObj]);
+    }
+
+    return createElement(
+        wrappedObj.type,
+        {
+            ...node.props,
+            key: node.key,
+            ...(node.ref && !node.props?.ref) ? { ref: node.ref } : {}
+        },
+        node.props?.children
+    );
+}
+
+const isNodeNotEqual = (nodeType, nodeType2) => {
+    if (nodeType !== nodeType2) return true;
+
+    if (typeof nodeType === 'function') {
+        return false;
+    } else if (nodeType?.$$typeof === REACT_SYMBOLS.forwardRef) {
+        return nodeType.render !== nodeType2?.render;
+    } else if (nodeType?.$$typeof === REACT_SYMBOLS.memo) {
+        return isNodeNotEqual(nodeType.type, nodeType2?.type);
+    }
+
+    return false;
 }
 
 const hijackRender = (type, doHijack, o) =>
@@ -178,6 +197,13 @@ function isHostElement(node) {
     );
 };
 
+function isClassComponent(type) {
+    return (
+        typeof type === 'function' &&
+        type.prototype?.isReactComponent != null
+    );
+}
+
 const getHotReload = () => {
     const runtimePath = `${globalThis.__METRO_GLOBAL_PREFIX__ || ''}__ReactRefresh`;
     return globalThis[runtimePath];
@@ -192,9 +218,13 @@ const listenHotRefresh = (callback) => {
         getHotReload().performReactRefresh = function (...args) {
             const result = originalPerformReactRefresh.apply(this, args);
 
-            globalThis.__reactMutationHotReloadMap.forEach(v => {
-                v();
-            });
+            try {
+                globalThis.__reactMutationHotReloadMap.forEach(v => {
+                    v();
+                });
+            } catch (error) {
+                console.error('listenHotRefresh err:', error);
+            }
 
             return result;
         }
@@ -204,5 +234,15 @@ const listenHotRefresh = (callback) => {
     const ref = {};
     globalThis.__reactMutationHotReloadMap.set(ref, callback);
 
-    return () => globalThis.__reactMutationHotReloadMap.delete(ref);
+    return () => {
+        if (!globalThis.__reactMutationHotReloadMap) return;
+
+        const res = globalThis.__reactMutationHotReloadMap.delete(ref);
+
+        if (!globalThis.__reactMutationHotReloadMap.size) {
+            delete globalThis.__reactMutationHotReloadMap;
+        }
+
+        return res;
+    }
 }
