@@ -1,0 +1,29 @@
+{
+  "name": "mutate-react",
+  "version": "1.0.0",
+  "description": "Mutate react components",
+  "keywords": [
+    "mutate-react",
+    "muatate",
+    "react",
+    "component"
+  ],
+  "homepage": "https://github.com/deflexable/mutate-react#readme",
+  "bugs": {
+    "url": "https://github.com/deflexable/mutate-react/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deflexable/mutate-react.git"
+  },
+  "license": "MIT",
+  "author": "Anthony",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "peerDependencies": {
+    "react": "*"
+  }
+}
