@@ -238,15 +238,5 @@ const listenHotRefresh = (callback) => {
     const ref = {};
     globalThis.__reactMutationHotReloadMap.set(ref, callback);
 
-    return () => {
-        if (!globalThis.__reactMutationHotReloadMap) return;
-
-        const res = globalThis.__reactMutationHotReloadMap.delete(ref);
-
-        if (!globalThis.__reactMutationHotReloadMap.size) {
-            delete globalThis.__reactMutationHotReloadMap;
-        }
-
-        return res;
-    }
+    return () => globalThis.__reactMutationHotReloadMap.delete(ref);
 }

@@ -13,6 +13,7 @@ export type MutationPath = Array<string | number>;
  */
 export interface MutantElement {
   __element: ReactElement | null;
+  '@type': symbol;
 }
 
 /**

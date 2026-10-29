@@ -1,6 +1,6 @@
 {
   "name": "mutate-react",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Mutate react components",
   "keywords": [
     "mutate-react",
@@ -20,6 +20,7 @@
   "author": "Anthony",
   "type": "module",
   "main": "index.js",
+  "types": "./index.d.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
