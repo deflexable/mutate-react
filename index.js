@@ -128,7 +128,7 @@ function __MutatedReactNode({ node, wrapNodeType, path }) {
         {
             ...node.props,
             key: node.key,
-            ...(node.ref && !node.props?.ref) ? { ref: node.ref } : {}
+            // ...(node.ref && !node.props?.ref) ? { ref: node.ref } : {}
         },
         node.props?.children
     );
